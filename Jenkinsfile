@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = 'playwright-tests'
-        DOCKER_CONTAINER = 'playwright-container'
     }
 
     stages {
@@ -16,30 +15,27 @@ pipeline {
 
         /*
         ======================================================
-        OPTION A: Run Playwright DIRECTLY on Jenkins node
+        STEP 1: VERIFY DOCKER ACCESS (CRITICAL)
         ======================================================
         */
-/*
-        stage('Install Dependencies') {
+        stage('Docker Verify') {
             steps {
                 bat '''
-                npm install
-                npx playwright install
+                echo ===== Docker Version =====
+                docker --version
+
+                echo ===== Docker Info =====
+                docker info
+
+                echo ===== Docker Hello World =====
+                docker run hello-world
                 '''
             }
         }
 
-        stage('Run Tests') {
-            steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                    bat 'npx playwright test'
-                }
-            }
-        }
-
-*/       /* 
+        /*
         ======================================================
-        OPTION B: Run Playwright INSIDE DOCKER (Enable later)
+        STEP 2: BUILD PLAYWRIGHT IMAGE
         ======================================================
         */
         stage('Docker Build Image') {
@@ -50,6 +46,11 @@ pipeline {
             }
         }
 
+        /*
+        ======================================================
+        STEP 3: RUN TESTS INSIDE CONTAINER
+        ======================================================
+        */
         stage('Run Tests in Docker') {
             steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
@@ -62,8 +63,12 @@ pipeline {
                 }
             }
         }
-        /**/
 
+        /*
+        ======================================================
+        STEP 4: PUBLISH RESULTS
+        ======================================================
+        */
         stage('Publish JUnit Report') {
             steps {
                 junit 'test-results/results.xml'
