@@ -11,7 +11,8 @@ pipeline {
     // -------------------------------------------------------
     environment {
         DOCKER_IMAGE = 'playwright-tests'
-        BUILD_REPORT_DIR = "build-%BUILD_NUMBER%"
+        NGINX_ROOT   = 'D:\\Devops\\nginx\\html\\playwright-report'
+        BUILD_DIR   = "build-${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -21,7 +22,6 @@ pipeline {
         // -------------------------------------------------------
         stage('Checkout') {
             steps {
-                // Pulls the latest code from the configured SCM
                 checkout scm
             }
         }
@@ -37,10 +37,10 @@ pipeline {
                 echo ===== Docker Version =====
                 docker --version
 
-                echo ===== Docker System Info =====
+                echo ===== Docker Info =====
                 docker info
 
-                echo ===== Docker Hello World Test =====
+                echo ===== Docker Sanity Test =====
                 docker run hello-world
                 '''
             }
@@ -79,7 +79,7 @@ pipeline {
 
         /*
         ======================================================
-        STEP 4: PUBLISH TEST RESULTS (CI VISIBILITY)
+        STEP 4: PUBLISH JUNIT RESULTS TO JENKINS
         ======================================================
         */
         stage('Publish JUnit Report') {
@@ -90,25 +90,29 @@ pipeline {
 
         /*
         ======================================================
-        STEP 5: PUBLISH HTML REPORT VIA NGINX (BUILD-SAFE)
+        STEP 5: PUBLISH HTML REPORT TO NGINX (BUILD-WISE)
         ======================================================
 
-        CHANGE MADE:
-        - Each build gets its own folder
-        - Old reports are preserved
+        PURPOSE:
+        - Prevent report overwrite
+        - Preserve build history
+        - Enable audit & rollback
         */
         stage('Publish Report to Nginx') {
             steps {
-                bat '''
-                mkdir D:\\Devops\\nginx\\html\\playwright-report\\%BUILD_REPORT_DIR%
-                xcopy /E /I /Y playwright-report D:\\Devops\\nginx\\html\\playwright-report\\%BUILD_REPORT_DIR%
-                '''
+                bat """
+                echo ===== Creating build-specific folder =====
+                mkdir "%NGINX_ROOT%\\%BUILD_DIR%"
+
+                echo ===== Copying Playwright report =====
+                xcopy /E /I /Y playwright-report "%NGINX_ROOT%\\%BUILD_DIR%"
+                """
             }
         }
 
         /*
         ======================================================
-        STEP 6: DISPLAY REPORT ACCESS URL
+        STEP 6: DISPLAY REPORT URL
         ======================================================
         */
         stage('Playwright Report URL') {
