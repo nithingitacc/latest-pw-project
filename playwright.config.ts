@@ -1,94 +1,134 @@
-// import { defineConfig, devices } from '@playwright/test';
-
-// /**
-//  * Read environment variables from file.
-//  * https://github.com/motdotla/dotenv
-//  */
-// // import dotenv from 'dotenv';
-// // import path from 'path';
-// // dotenv.config({ path: path.resolve(__dirname, '.env') });
-
-// /**
-//  * See https://playwright.dev/docs/test-configuration.
-//  */
-// export default defineConfig({
-//   testDir: './tests',
-//   /* Run tests in files in parallel */
-//   fullyParallel: true,
-//   /* Fail the build on CI if you accidentally left test.only in the source code. */
-//   forbidOnly: !!process.env.CI,
-//   /* Retry on CI only */
-//   retries: process.env.CI ? 2 : 0,
-//   /* Opt out of parallel tests on CI. */
-//   workers: process.env.CI ? 1 : undefined,
-//   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-//   reporter: 'html',
-//   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
-//   use: {
-//     /* Base URL to use in actions like `await page.goto('')`. */
-//     // baseURL: 'http://localhost:3000',
-
-//     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-//     trace: 'on-first-retry',
-//   },
-
-//   /* Configure projects for major browsers */
-//   projects: [
-//     {
-//       name: 'chromium',
-//       use: { ...devices['Desktop Chrome'] },
-//     },
-
-//     {
-//       name: 'firefox',
-//       use: { ...devices['Desktop Firefox'] },
-//     },
-
-//     {
-//       name: 'webkit',
-//       use: { ...devices['Desktop Safari'] },
-//     },
-
-//     /* Test against mobile viewports. */
-//     // {
-//     //   name: 'Mobile Chrome',
-//     //   use: { ...devices['Pixel 5'] },
-//     // },
-//     // {
-//     //   name: 'Mobile Safari',
-//     //   use: { ...devices['iPhone 12'] },
-//     // },
-
-//     /* Test against branded browsers. */
-//     // {
-//     //   name: 'Microsoft Edge',
-//     //   use: { ...devices['Desktop Edge'], channel: 'msedge' },
-//     // },
-//     // {
-//     //   name: 'Google Chrome',
-//     //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-//     // },
-//   ],
-
-//   /* Run your local dev server before starting the tests */
-//   // webServer: {
-//   //   command: 'npm run start',
-//   //   url: 'http://localhost:3000',
-//   //   reuseExistingServer: !process.env.CI,
-//   // },
-// });
-
+// -------------------------------------------------------
+// Import Playwright's configuration helper
+// -------------------------------------------------------
+// defineConfig helps with:
+// - Type safety
+// - Auto-completion in editors (VS Code)
+// - Cleaner structure
 import { defineConfig } from '@playwright/test';
 
+
+// -------------------------------------------------------
+// Export Playwright Test Configuration
+// -------------------------------------------------------
 export default defineConfig({
+
+  /*
+  =======================================================
+  REPORTER CONFIGURATION
+  =======================================================
+
+  PURPOSE:
+  - Define how test results are generated and stored
+  - Enable both human-readable and CI-friendly reports
+
+  WHY MULTIPLE REPORTERS:
+  - HTML → For manual review (QA, Managers, Stakeholders)
+  - JUnit XML → For Jenkins CI (Test Results tab)
+  */
   reporter: [
-    ['html', { outputFolder: 'playwright-report', open: 'never' }],
-    ['junit', { outputFile: 'test-results/results.xml' }]
+
+    /*
+    -------------------------------------------------------
+    HTML REPORTER
+    -------------------------------------------------------
+    PURPOSE:
+    - Rich, interactive report
+    - Screenshots, videos, traces linked per test
+
+    CONFIG:
+    - outputFolder: Where HTML files are generated
+    - open: 'never' → Prevent auto-opening browser
+      (important for CI servers like Jenkins)
+    */
+    ['html', {
+      outputFolder: 'playwright-report',
+      open: 'never'
+    }],
+
+    /*
+    -------------------------------------------------------
+    JUNIT REPORTER
+    -------------------------------------------------------
+    PURPOSE:
+    - Machine-readable test result format
+    - Jenkins reads this to show pass/fail trends
+
+    IMPORTANT:
+    - Jenkins junit step looks for this file
+    */
+    ['junit', {
+      outputFile: 'test-results/results.xml'
+    }]
   ],
+
+  /*
+  =======================================================
+  TEST EXECUTION SETTINGS (use block)
+  =======================================================
+
+  PURPOSE:
+  - Define default browser & debugging behavior
+  - Applies to ALL tests unless overridden
+  */
   use: {
+
+    /*
+    -------------------------------------------------------
+    HEADLESS MODE
+    -------------------------------------------------------
+    true  → Browser runs without UI (CI-friendly)
+    false → Visible browser (local debugging)
+
+    BEST PRACTICE:
+    - Always true in Jenkins / Docker
+    */
     headless: true,
+
+    /*
+    -------------------------------------------------------
+    SCREENSHOT CAPTURE
+    -------------------------------------------------------
+    'on' → Screenshot taken on test failure
+    OPTIONS:
+    - 'off'
+    - 'on'
+    - 'only-on-failure'
+
+    BENEFIT:
+    - Helps debug UI failures from reports
+    */
     screenshot: 'on',
+
+    /*
+    -------------------------------------------------------
+    TRACE RECORDING
+    -------------------------------------------------------
+    'on' → Record trace for every test
+    Trace includes:
+    - DOM snapshots
+    - Network requests
+    - Console logs
+    - Screenshots
+
+    NOTE:
+    - Viewable directly in Playwright HTML report
+    */
     trace: 'on',
+
+    /*
+    -------------------------------------------------------
+    VIDEO RECORDING
+    -------------------------------------------------------
+    'on' → Record video of test execution
+    OPTIONS:
+    - 'off'
+    - 'on'
+    - 'retain-on-failure'
+
+    BEST PRACTICE:
+    - 'on' or 'retain-on-failure' for CI pipelines
+    */
     video: 'on'
   }
 });
