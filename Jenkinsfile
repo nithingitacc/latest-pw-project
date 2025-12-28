@@ -69,6 +69,7 @@ pipeline {
                 catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
                     bat '''
                     docker run --rm ^
+                      --user root ^
                       -v "%cd%\\playwright-report:/app/playwright-report" ^
                       -v "%cd%\\test-results:/app/test-results" ^
                       %DOCKER_IMAGE%
