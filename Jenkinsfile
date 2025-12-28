@@ -11,6 +11,7 @@ pipeline {
     // -------------------------------------------------------
     environment {
         DOCKER_IMAGE = 'playwright-tests'
+        BUILD_REPORT_DIR = "build-%BUILD_NUMBER%"
     }
 
     stages {
@@ -29,15 +30,6 @@ pipeline {
         ======================================================
         STEP 1: VERIFY DOCKER ACCESS (CRITICAL FOUNDATION)
         ======================================================
-
-        PURPOSE:
-        - Ensure Jenkins can talk to Docker BEFORE doing anything else
-        - Prevent silent failures later in the pipeline
-
-        WHAT THIS CONFIRMS:
-        ✔ Docker is installed
-        ✔ Docker daemon is running
-        ✔ Jenkins user has Docker access
         */
         stage('Docker Verify') {
             steps {
@@ -58,18 +50,6 @@ pipeline {
         ======================================================
         STEP 2: BUILD PLAYWRIGHT DOCKER IMAGE
         ======================================================
-
-        PURPOSE:
-        - Build a self-contained Playwright test image
-        - Ensures consistent test environment (no local dependency issues)
-
-        WHAT HAPPENS:
-        - Uses Dockerfile
-        - Installs Node + Playwright + browsers
-        - Prepares container to run tests
-
-        OUTPUT:
-        - Docker image named "playwright-tests"
         */
         stage('Docker Build Image') {
             steps {
@@ -83,19 +63,6 @@ pipeline {
         ======================================================
         STEP 3: RUN PLAYWRIGHT TESTS INSIDE DOCKER
         ======================================================
-
-        PURPOSE:
-        - Execute tests in isolated container
-        - Avoid host machine dependency conflicts
-
-        IMPORTANT DETAILS:
-        - --rm removes container after run (clean builds)
-        - Volume mounts export reports back to Jenkins workspace
-
-        RESULT:
-        ✔ Tests execute
-        ✔ HTML report generated
-        ✔ JUnit XML generated
         */
         stage('Run Tests in Docker') {
             steps {
@@ -114,13 +81,6 @@ pipeline {
         ======================================================
         STEP 4: PUBLISH TEST RESULTS (CI VISIBILITY)
         ======================================================
-
-        PURPOSE:
-        - Allow Jenkins to understand test outcomes
-        - Enable trend graphs, failures, history
-
-        REQUIREMENT:
-        - Playwright must generate results.xml
         */
         stage('Publish JUnit Report') {
             steps {
@@ -130,21 +90,18 @@ pipeline {
 
         /*
         ======================================================
-        STEP 5: PUBLISH HTML REPORT VIA NGINX
+        STEP 5: PUBLISH HTML REPORT VIA NGINX (BUILD-SAFE)
         ======================================================
 
-        PURPOSE:
-        - Make test report accessible to non-technical users
-        - Acts as basic CD-style artifact publishing
-
-        RESULT:
-        ✔ Report hosted via Nginx
-        ✔ Shareable URL
+        CHANGE MADE:
+        - Each build gets its own folder
+        - Old reports are preserved
         */
         stage('Publish Report to Nginx') {
             steps {
                 bat '''
-                xcopy /E /I /Y playwright-report D:\\Devops\\nginx\\html\\playwright-report
+                mkdir D:\\Devops\\nginx\\html\\playwright-report\\%BUILD_REPORT_DIR%
+                xcopy /E /I /Y playwright-report D:\\Devops\\nginx\\html\\playwright-report\\%BUILD_REPORT_DIR%
                 '''
             }
         }
@@ -153,14 +110,11 @@ pipeline {
         ======================================================
         STEP 6: DISPLAY REPORT ACCESS URL
         ======================================================
-
-        PURPOSE:
-        - Clearly show report location in Jenkins logs
         */
         stage('Playwright Report URL') {
             steps {
                 echo '================= Playwright HTML Report ================='
-                echo '👉 http://localhost/playwright-report/index.html'
+                echo "👉 http://localhost/playwright-report/build-${env.BUILD_NUMBER}/index.html"
                 echo '=========================================================='
             }
         }
@@ -170,10 +124,6 @@ pipeline {
     ======================================================
     POST-BUILD ACTIONS (ALWAYS EXECUTE)
     ======================================================
-
-    PURPOSE:
-    - Preserve reports even if build fails
-    - Enable historical comparison
     */
     post {
         always {
