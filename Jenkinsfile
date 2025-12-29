@@ -132,8 +132,9 @@ pipeline {
     */
     post {
         always {
-            archiveArtifacts artifacts: 'playwright-report/**/*, test-results/**/*',
-                             allowEmptyArchive: true
+            archiveArtifacts artifacts: 'test-results/results.xml',
+                 allowEmptyArchive: true
+
         }
     }
 }
