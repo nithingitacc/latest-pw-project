@@ -1,6 +1,6 @@
 # -------------------------------
 # Workflow name shown in GitHub Actions UI
-# -------------------------------
+# ----------------------------------------
 name: Trigger Jenkins CI
 
 
