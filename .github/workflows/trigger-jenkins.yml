@@ -1,37 +1,92 @@
-name: Trigger Jenkins CI Pipeline
+# -------------------------------
+# Workflow name shown in GitHub Actions UI
+# -------------------------------
+name: Trigger Jenkins CI
 
-# -------------------------------------------------------
-# WHEN THIS WORKFLOW RUNS
-# -------------------------------------------------------
+
+# -------------------------------
+# Defines WHEN this workflow should run
+# -------------------------------
 on:
-  push:
+  push:                      # Trigger workflow on a git push event
     branches:
-      - main
-      - master
+      - main                 # Only when code is pushed to the 'main' branch
 
-# -------------------------------------------------------
-# JOB: Trigger Jenkins build
-# -------------------------------------------------------
+
+# -------------------------------
+# Jobs section (a workflow can have multiple jobs)
+# -------------------------------
 jobs:
-  trigger-jenkins:
-    runs-on: ubuntu-latest
 
+  # -------------------------------
+  # Job ID (internal name, not UI name)
+  # -------------------------------
+  trigger-jenkins:
+
+    # -------------------------------
+    # Runner type
+    # 'self-hosted' means:
+    # - This job runs on YOUR Windows machine
+    # - NOT on GitHub-hosted runners
+    # - Required because Jenkins is reachable only from your network
+    # -------------------------------
+    runs-on: self-hosted
+
+
+    # -------------------------------
+    # Steps executed inside this job
+    # -------------------------------
     steps:
 
-      # -------------------------------------------------------
-      # STEP 1: Show commit info (traceability)
-      # -------------------------------------------------------
-      - name: Print commit details
-        run: |
-          echo "Repository: $GITHUB_REPOSITORY"
-          echo "Branch: $GITHUB_REF"
-          echo "Commit: $GITHUB_SHA"
-
-      # -------------------------------------------------------
-      # STEP 2: Trigger Jenkins job remotely
-      # -------------------------------------------------------
+      # -------------------------------
+      # Step name shown in Actions UI
+      # -------------------------------
       - name: Trigger Jenkins Job
+
+
+        # -------------------------------
+        # Environment variables for this step
+        # Values are pulled securely from GitHub Secrets
+        # -------------------------------
+        env:
+
+          # Jenkins username (the user who owns the API token)
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}
+
+          # Jenkins API Token generated from Jenkins → User → Configure
+          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
+
+          # Base Jenkins URL
+          # Example: http://192.168.29.84:8080
+          JENKINS_URL: ${{ secrets.JENKINS_URL }}
+
+          # Jenkins Job name (must match exactly)
+          # Example: Playwright_Pipeline
+          JENKINS_JOB: ${{ secrets.JENKINS_JOB }}
+
+          # Job trigger token configured inside Jenkins job
+          JENKINS_TRIGGER_TOKEN: ${{ secrets.JENKINS_TRIGGER_TOKEN }}
+
+
+        # -------------------------------
+        # Command(s) executed by the runner
+        # Using Windows PowerShell / CMD syntax (^ for line continuation)
+        # -------------------------------
         run: |
-          curl -X POST \
-            "${{ secrets.JENKINS_URL }}/job/${{ secrets.JENKINS_JOB }}/build?token=github-trigger-token" \
-            --user "${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_API_TOKEN }}"
+
+          # Call Jenkins REST API to trigger a build
+          # - POST request to /build endpoint
+          # - Job trigger token passed as query parameter
+          curl -X POST "$JENKINS_URL/job/$JENKINS_JOB/build?token=$JENKINS_TRIGGER_TOKEN" ^
+          
+          # Authenticate using Jenkins username + API token
+          --user "$JENKINS_USER:$JENKINS_API_TOKEN" ^
+          
+          # Fail if Jenkins does not respond within 10 seconds
+          --connect-timeout 10 ^
+          
+          # Hard timeout for the entire request (seconds)
+          --max-time 20 ^
+          
+          # Make curl return a non-zero exit code on HTTP errors
+          --fail
