@@ -1,92 +1,66 @@
-# -------------------------------
-# Workflow name shown in GitHub Actions UI
-# ----------------------------------------
+# ----------------------------------
+# Workflow name (shown in GitHub UI)
+# ----------------------------------
 name: Trigger Jenkins CI
 
-
-# -------------------------------
-# Defines WHEN this workflow should run
-# -------------------------------
+# ----------------------------------
+# When this workflow runs
+# Triggered on push to main branch
+# ----------------------------------
 on:
-  push:                      # Trigger workflow on a git push event
+  push:
     branches:
-      - main                 # Only when code is pushed to the 'main' branch
+      - main
 
-
-# -------------------------------
-# Jobs section (a workflow can have multiple jobs)
-# -------------------------------
+# ----------------------------------
+# Jobs section (REQUIRED root key)
+# ----------------------------------
 jobs:
 
-  # -------------------------------
-  # Job ID (internal name, not UI name)
-  # -------------------------------
+  # ----------------------------------
+  # Job ID (can be any name)
+  # ----------------------------------
   trigger-jenkins:
 
-    # -------------------------------
-    # Runner type
-    # 'self-hosted' means:
-    # - This job runs on YOUR Windows machine
-    # - NOT on GitHub-hosted runners
-    # - Required because Jenkins is reachable only from your network
-    # -------------------------------
+    # ----------------------------------
+    # Runner selection
+    # Must match your self-hosted runner
+    # ----------------------------------
     runs-on: self-hosted
 
-
-    # -------------------------------
-    # Steps executed inside this job
-    # -------------------------------
+    # ----------------------------------
+    # Steps inside this job
+    # ----------------------------------
     steps:
 
       # -------------------------------
-      # Step name shown in Actions UI
+      # Step name shown in GitHub UI
+      # This step triggers Jenkins
       # -------------------------------
-      - name: Trigger Jenkins Job
+      - name: Trigger Jenkins build
 
+        # Explicitly tell GitHub Actions to use PowerShell
+        shell: powershell
 
         # -------------------------------
-        # Environment variables for this step
-        # Values are pulled securely from GitHub Secrets
+        # Environment variables
+        # Injected securely from GitHub Secrets
         # -------------------------------
         env:
-
-          # Jenkins username (the user who owns the API token)
           JENKINS_USER: ${{ secrets.JENKINS_USER }}
-
-          # Jenkins API Token generated from Jenkins → User → Configure
           JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
-
-          # Base Jenkins URL
-          # Example: http://192.168.29.84:8080
           JENKINS_URL: ${{ secrets.JENKINS_URL }}
-
-          # Jenkins Job name (must match exactly)
-          # Example: Playwright_Pipeline
           JENKINS_JOB: ${{ secrets.JENKINS_JOB }}
-
-          # Job trigger token configured inside Jenkins job
           JENKINS_TRIGGER_TOKEN: ${{ secrets.JENKINS_TRIGGER_TOKEN }}
 
-
         # -------------------------------
-        # Command(s) executed by the runner
-        # Using Windows PowerShell / CMD syntax (^ for line continuation)
+        # PowerShell script
+        # curl.exe is REQUIRED on Windows
         # -------------------------------
         run: |
-
-          # Call Jenkins REST API to trigger a build
-          # - POST request to /build endpoint
-          # - Job trigger token passed as query parameter
-          curl -X POST "$JENKINS_URL/job/$JENKINS_JOB/build?token=$JENKINS_TRIGGER_TOKEN" `
-          
-          # Authenticate using Jenkins username + API token
-          --user "$JENKINS_USER:$JENKINS_API_TOKEN" `
-          
-          # Fail if Jenkins does not respond within 10 seconds
-          --connect-timeout 10 `
-          
-          # Hard timeout for the entire request (seconds)
-          --max-time 20 
-          
-          # Make curl return a non-zero exit code on HTTP errors
-          --fail
+          curl.exe -X POST `
+            "$env:JENKINS_URL/job/$env:JENKINS_JOB/build?token=$env:JENKINS_TRIGGER_TOKEN" `
+            --user "$env:JENKINS_USER:$env:JENKINS_API_TOKEN" `
+            --connect-timeout 10 `
+            --max-time 20 `
+            --fail
