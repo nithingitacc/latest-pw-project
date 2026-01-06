@@ -77,16 +77,16 @@ jobs:
           # Call Jenkins REST API to trigger a build
           # - POST request to /build endpoint
           # - Job trigger token passed as query parameter
-          curl -X POST "$JENKINS_URL/job/$JENKINS_JOB/build?token=$JENKINS_TRIGGER_TOKEN" ^
+          curl -X POST "$JENKINS_URL/job/$JENKINS_JOB/build?token=$JENKINS_TRIGGER_TOKEN" `
           
           # Authenticate using Jenkins username + API token
-          --user "$JENKINS_USER:$JENKINS_API_TOKEN" ^
+          --user "$JENKINS_USER:$JENKINS_API_TOKEN" `
           
           # Fail if Jenkins does not respond within 10 seconds
-          --connect-timeout 10 ^
+          --connect-timeout 10 `
           
           # Hard timeout for the entire request (seconds)
-          --max-time 20 ^
+          --max-time 20 
           
           # Make curl return a non-zero exit code on HTTP errors
           --fail
