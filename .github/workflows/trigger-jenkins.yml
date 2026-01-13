@@ -111,7 +111,7 @@ jobs:
           # ----------------------------------
           curl.exe -X POST `
             -H "$($crumb.crumbRequestField): $($crumb.crumb)" `
-            "$env:JENKINS_URL/job/$env:JENKINS_JOB/build?token=$env:JENKINS_TRIGGER_TOKEN" `
+            "$env:JENKINS_URL/job/$env:JENKINS_JOB/build" `
             --user "$env:JENKINS_USER:$env:JENKINS_API_TOKEN" `
             --connect-timeout 10 `
             --max-time 20 `
