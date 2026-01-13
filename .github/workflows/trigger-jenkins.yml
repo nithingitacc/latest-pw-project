@@ -1,13 +1,13 @@
 # ----------------------------------
 # Workflow name
-# This is the name shown in GitHub Actions UI
+# This is the name displayed in GitHub Actions UI
 # ----------------------------------
 name: Trigger Jenkins CI
 
 # ----------------------------------
-# Workflow trigger conditions
+# Workflow trigger condition
 # This workflow runs automatically
-# whenever code is pushed to the main branch
+# whenever a commit is pushed to the main branch
 # ----------------------------------
 on:
   push:
@@ -16,26 +16,26 @@ on:
 
 # ----------------------------------
 # Jobs section (MANDATORY root key)
-# A workflow can have one or more jobs
+# A workflow can contain one or more jobs
 # ----------------------------------
 jobs:
 
   # ----------------------------------
-  # Job identifier (internal name)
-  # Can be anything, used for reference only
+  # Job identifier (internal name only)
+  # This name is not shown to Jenkins
   # ----------------------------------
   trigger-jenkins:
 
     # ----------------------------------
     # Runner selection
-    # Uses an organization-approved self-hosted runner
-    # (recommended for Jenkins access & network control)
+    # Uses a self-hosted runner
+    # Required so Jenkins is reachable on local network
     # ----------------------------------
     runs-on: self-hosted
 
     # ----------------------------------
     # Steps define what this job actually does
-    # Steps run sequentially
+    # Steps execute sequentially
     # ----------------------------------
     steps:
 
@@ -47,19 +47,20 @@ jobs:
 
         # -------------------------------
         # Explicit shell selection
-        # REQUIRED on Windows runners
+        # REQUIRED for Windows runners
         # Ensures PowerShell syntax works correctly
         # -------------------------------
         shell: powershell
 
         # -------------------------------
         # Environment variables
-        # Injected securely from GitHub Secrets
-        # Secrets are masked in logs automatically
+        # Values are injected securely from GitHub Secrets
+        # Secrets are masked automatically in logs
         # -------------------------------
         env:
-          # Jenkins service account username
-          # Should be a non-human, least-privilege user
+
+          # Jenkins username
+          # Should be a service account (recommended)
           JENKINS_USER: ${{ secrets.JENKINS_USER }}
 
           # Jenkins API token
@@ -68,51 +69,42 @@ jobs:
           JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
 
           # Base Jenkins URL
-          # Example: http://jenkins.company.local:8080
+          # Example: http://192.168.29.84:8080
+          # IMPORTANT: No trailing slash
           JENKINS_URL: ${{ secrets.JENKINS_URL }}
 
-          # Jenkins job path
-          # Examples:
-          #   MyJob
-          #   Folder/job/MyJob
+          # Jenkins job name (NOT a full URL)
+          # Example:
+          #   Auto-CI-CD-Build
+          #   Folder/job/Auto-CI-CD-Build
           JENKINS_JOB: ${{ secrets.JENKINS_JOB }}
-
-          # Jenkins remote build trigger token
-          # Configured in Jenkins Job → Build Triggers
-          JENKINS_TRIGGER_TOKEN: ${{ secrets.JENKINS_TRIGGER_TOKEN }}
 
         # -------------------------------
         # PowerShell execution block
-        # curl.exe is REQUIRED (not curl alias)
-        # Backtick (`) is PowerShell line continuation
+        # IMPORTANT:
+        # - Use curl.exe (NOT curl alias)
+        # - Backtick (`) is PowerShell line continuation
         # -------------------------------
         run: |
           # ----------------------------------
           # STEP 1: Fetch Jenkins CSRF crumb
-          # Jenkins blocks POST requests without this
-          # This call authenticates using API token
+          # Jenkins blocks POST requests without a valid crumb
+          # This request authenticates using API token
           # ----------------------------------
-          $crumbResponse = curl.exe -s `
+          $crumb = curl.exe -s `
             --user "$env:JENKINS_USER:$env:JENKINS_API_TOKEN" `
-            "$env:JENKINS_URL/crumbIssuer/api/json"
+            "$env:JENKINS_URL/crumbIssuer/api/json" |
+            ConvertFrom-Json
 
           # ----------------------------------
-          # STEP 2: Convert JSON response to object
-          # Extracts crumb field name and value
-          # ----------------------------------
-          $crumb = ($crumbResponse | ConvertFrom-Json)
-
-          # ----------------------------------
-          # STEP 3: Trigger Jenkins job securely
+          # STEP 2: Trigger Jenkins job
           # - Uses POST /build endpoint
           # - Passes CSRF crumb as HTTP header
           # - Authenticates using API token
-          # - Fails fast on HTTP/network errors
+          # - Fails workflow if Jenkins returns error
           # ----------------------------------
           curl.exe -X POST `
             -H "$($crumb.crumbRequestField): $($crumb.crumb)" `
-            "$env:JENKINS_URL/job/$env:JENKINS_JOB/build?token=$env:JENKINS_TRIGGER_TOKEN" `
             --user "$env:JENKINS_USER:$env:JENKINS_API_TOKEN" `
-            --connect-timeout 10 `
-            --max-time 20 `
+            "$env:JENKINS_URL/job/$env:JENKINS_JOB/build" `
             --fail
