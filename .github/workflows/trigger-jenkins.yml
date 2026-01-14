@@ -1,46 +1,90 @@
-name: Trigger Jenkins CI
+# Name of the GitHub Actions workflow
+name: Trigger Jenkins Build
 
+# Define when this workflow should run
 on:
   push:
     branches:
-      - main
+      - main   # Triggers only when code is pushed to main branch
 
 jobs:
   trigger-jenkins:
-    runs-on: self-hosted   # Windows runner
+    # Use self-hosted Windows runner
+    runs-on: self-hosted
 
     steps:
-      - name: Trigger Jenkins build
-        shell: powershell
+      # Step 1: Checkout repository (required by GitHub Actions)
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Trigger Jenkins job using PowerShell + curl
+      - name: Trigger Jenkins Build
+        shell: pwsh
         env:
+          # Jenkins base URL (example: http://192.168.29.84:8080)
           JENKINS_URL: ${{ secrets.JENKINS_URL }}
-          JENKINS_USER: ${{ secrets.JENKINS_USER }}
-          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
+
+          # Jenkins job name (example: my-job or folder/job-name)
           JENKINS_JOB: ${{ secrets.JENKINS_JOB }}
+
+          # Jenkins username (NOT email)
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}
+
+          # Jenkins API token (generated from Jenkins → User → Configure)
+          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
+
         run: |
+          # -------------------------------
+          # Validate required environment variables
+          # -------------------------------
+          if (-not $env:JENKINS_URL -or -not $env:JENKINS_JOB -or -not $env:JENKINS_USER -or -not $env:JENKINS_API_TOKEN) {
+            Write-Error "One or more required Jenkins secrets are missing"
+            exit 1
+          }
+
           Write-Host "Triggering Jenkins job: $env:JENKINS_JOB"
           Write-Host "Jenkins URL: $env:JENKINS_URL"
 
-          # ------------------------------------------
-          # STEP 1: Get CSRF crumb from Jenkins
-          # ------------------------------------------
-          $crumbResponse = curl.exe -s `
-            --user "$env:JENKINS_USER:$env:JENKINS_API_TOKEN" `
-            "$env:JENKINS_URL/crumbIssuer/api/json"
+          # -------------------------------
+          # Build Basic Auth header (username:API_TOKEN → Base64)
+          # -------------------------------
+          $auth = [Convert]::ToBase64String(
+            [Text.Encoding]::ASCII.GetBytes(
+              "$($env:JENKINS_USER):$($env:JENKINS_API_TOKEN)"
+            )
+          )
+
+          # -------------------------------
+          # Fetch CSRF crumb from Jenkins
+          # -------------------------------
+          $crumbResponse = curl.exe `
+            -s `
+            -H "Authorization: Basic $auth" `
+            "$($env:JENKINS_URL)/crumbIssuer/api/json"
 
           if (-not $crumbResponse) {
             Write-Error "Failed to fetch CSRF crumb"
             exit 1
           }
 
-          $crumb = $crumbResponse | ConvertFrom-Json
+          # -------------------------------
+          # Parse crumb JSON safely
+          # -------------------------------
+          $crumbJson = $crumbResponse | ConvertFrom-Json
+          $crumbField = $crumbJson.crumbRequestField
+          $crumbValue = $crumbJson.crumb
 
-          # ------------------------------------------
-          # STEP 2: Trigger Jenkins build (POST)
-          # ------------------------------------------
-          curl.exe -X POST `
-            -H "$($crumb.crumbRequestField): $($crumb.crumb)" `
-            --user "$env:JENKINS_USER:$env:JENKINS_API_TOKEN" `
-            "$env:JENKINS_URL/job/$env:JENKINS_JOB/build"
+          # -------------------------------
+          # Trigger Jenkins build
+          # -------------------------------
+          $buildUrl = "$($env:JENKINS_URL)/job/$($env:JENKINS_JOB)/build"
 
-          Write-Host "✅ Jenkins build triggered successfully"
+          Write-Host "Triggering build URL: $buildUrl"
+
+          curl.exe `
+            -X POST `
+            -H "Authorization: Basic $auth" `
+            -H "$crumbField: $crumbValue" `
+            "$buildUrl"
+
+          Write-Host "Jenkins build triggered successfully"
