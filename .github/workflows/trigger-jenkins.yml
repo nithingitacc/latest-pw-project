@@ -14,7 +14,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Trigger Jenkins Build
-        # 🔴 IMPORTANT CHANGE: use Windows PowerShell
         shell: powershell
         env:
           JENKINS_URL: ${{ secrets.JENKINS_URL }}
@@ -24,7 +23,7 @@ jobs:
 
         run: |
           # -------------------------------
-          # Validate required environment variables
+          # Validate required variables
           # -------------------------------
           if (-not $env:JENKINS_URL -or `
               -not $env:JENKINS_JOB -or `
@@ -67,13 +66,12 @@ jobs:
           # Trigger Jenkins build
           # -------------------------------
           $buildUrl = "$($env:JENKINS_URL)/job/$($env:JENKINS_JOB)/build"
-
           Write-Host "Triggering build URL: $buildUrl"
 
           curl.exe `
             -X POST `
             -H "Authorization: Basic $auth" `
-            -H "$crumbField: $crumbValue" `
+            -H "${crumbField}: ${crumbValue}" `
             "$buildUrl"
 
           Write-Host "✅ Jenkins build triggered successfully"
