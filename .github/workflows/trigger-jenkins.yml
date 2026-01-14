@@ -1,43 +1,35 @@
-# Name of the GitHub Actions workflow
 name: Trigger Jenkins Build
 
-# Define when this workflow should run
 on:
   push:
     branches:
-      - main   # Triggers only when code is pushed to main branch
+      - main
 
 jobs:
   trigger-jenkins:
-    # Use self-hosted Windows runner
     runs-on: self-hosted
 
     steps:
-      # Step 1: Checkout repository (required by GitHub Actions)
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Trigger Jenkins job using PowerShell + curl
       - name: Trigger Jenkins Build
-        shell: pwsh
+        # 🔴 IMPORTANT CHANGE: use Windows PowerShell
+        shell: powershell
         env:
-          # Jenkins base URL (example: http://192.168.29.84:8080)
           JENKINS_URL: ${{ secrets.JENKINS_URL }}
-
-          # Jenkins job name (example: my-job or folder/job-name)
           JENKINS_JOB: ${{ secrets.JENKINS_JOB }}
-
-          # Jenkins username (NOT email)
           JENKINS_USER: ${{ secrets.JENKINS_USER }}
-
-          # Jenkins API token (generated from Jenkins → User → Configure)
           JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
 
         run: |
           # -------------------------------
           # Validate required environment variables
           # -------------------------------
-          if (-not $env:JENKINS_URL -or -not $env:JENKINS_JOB -or -not $env:JENKINS_USER -or -not $env:JENKINS_API_TOKEN) {
+          if (-not $env:JENKINS_URL -or `
+              -not $env:JENKINS_JOB -or `
+              -not $env:JENKINS_USER -or `
+              -not $env:JENKINS_API_TOKEN) {
             Write-Error "One or more required Jenkins secrets are missing"
             exit 1
           }
@@ -46,7 +38,7 @@ jobs:
           Write-Host "Jenkins URL: $env:JENKINS_URL"
 
           # -------------------------------
-          # Build Basic Auth header (username:API_TOKEN → Base64)
+          # Build Basic Auth header
           # -------------------------------
           $auth = [Convert]::ToBase64String(
             [Text.Encoding]::ASCII.GetBytes(
@@ -55,7 +47,7 @@ jobs:
           )
 
           # -------------------------------
-          # Fetch CSRF crumb from Jenkins
+          # Fetch CSRF crumb
           # -------------------------------
           $crumbResponse = curl.exe `
             -s `
@@ -67,10 +59,7 @@ jobs:
             exit 1
           }
 
-          # -------------------------------
-          # Parse crumb JSON safely
-          # -------------------------------
-          $crumbJson = $crumbResponse | ConvertFrom-Json
+          $crumbJson  = $crumbResponse | ConvertFrom-Json
           $crumbField = $crumbJson.crumbRequestField
           $crumbValue = $crumbJson.crumb
 
@@ -87,4 +76,4 @@ jobs:
             -H "$crumbField: $crumbValue" `
             "$buildUrl"
 
-          Write-Host "Jenkins build triggered successfully"
+          Write-Host "✅ Jenkins build triggered successfully"
