@@ -1,30 +1,71 @@
+# --------------------------------------------------
+# GitHub Actions workflow name
+# This is what you see in the Actions tab
+# --------------------------------------------------
 name: Trigger Jenkins Build
 
+# --------------------------------------------------
+# Event that triggers this workflow
+# Here: every push to the "main" branch
+# --------------------------------------------------
 on:
   push:
     branches:
       - main
 
+# --------------------------------------------------
+# Define the jobs in this workflow
+# --------------------------------------------------
 jobs:
   trigger-jenkins:
+
+    # --------------------------------------------------
+    # Run this job on a self-hosted runner
+    # (Your Windows machine where Jenkins is reachable)
+    # --------------------------------------------------
     runs-on: self-hosted
 
+    # --------------------------------------------------
+    # Steps executed inside this job
+    # --------------------------------------------------
     steps:
+
+      # --------------------------------------------------
+      # Step 1: Checkout the repository code
+      # Needed even if we only trigger Jenkins
+      # --------------------------------------------------
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # --------------------------------------------------
+      # Step 2: Trigger Jenkins build using PowerShell
+      # --------------------------------------------------
       - name: Trigger Jenkins Build
-        shell: powershell
-        env:
-          JENKINS_URL: ${{ secrets.JENKINS_URL }}
-          JENKINS_JOB: ${{ secrets.JENKINS_JOB }}
-          JENKINS_USER: ${{ secrets.JENKINS_USER }}
-          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}
 
+        # --------------------------------------------------
+        # Explicitly use Windows PowerShell
+        # (Important for self-hosted Windows runner)
+        # --------------------------------------------------
+        shell: powershell
+
+        # --------------------------------------------------
+        # Environment variables sourced from GitHub Secrets
+        # These are injected securely at runtime
+        # --------------------------------------------------
+        env:
+          JENKINS_URL: ${{ secrets.JENKINS_URL }}          # Base Jenkins URL (e.g., http://192.168.x.x:8080)
+          JENKINS_JOB: ${{ secrets.JENKINS_JOB }}          # Jenkins job name (exact, case-sensitive)
+          JENKINS_USER: ${{ secrets.JENKINS_USER }}        # Jenkins username
+          JENKINS_API_TOKEN: ${{ secrets.JENKINS_API_TOKEN }}  # Jenkins API token (NOT password)
+
+        # --------------------------------------------------
+        # PowerShell script starts here
+        # --------------------------------------------------
         run: |
-          # -------------------------------
-          # Validate required variables
-          # -------------------------------
+          # -----------------------------------------------
+          # Validate that all required environment variables exist
+          # Fail fast if any secret is missing
+          # -----------------------------------------------
           if (-not $env:JENKINS_URL -or `
               -not $env:JENKINS_JOB -or `
               -not $env:JENKINS_USER -or `
@@ -33,45 +74,72 @@ jobs:
             exit 1
           }
 
+          # -----------------------------------------------
+          # Log basic info (safe, no secrets exposed)
+          # -----------------------------------------------
           Write-Host "Triggering Jenkins job: $env:JENKINS_JOB"
           Write-Host "Jenkins URL: $env:JENKINS_URL"
 
-          # -------------------------------
-          # Build Basic Auth header
-          # -------------------------------
+          # -----------------------------------------------
+          # Build HTTP Basic Authentication header
+          # Jenkins requires:
+          #   base64(username:API_TOKEN)
+          # -----------------------------------------------
           $auth = [Convert]::ToBase64String(
             [Text.Encoding]::ASCII.GetBytes(
               "$($env:JENKINS_USER):$($env:JENKINS_API_TOKEN)"
             )
           )
 
-          # -------------------------------
-          # Fetch CSRF crumb
-          # -------------------------------
+          # -----------------------------------------------
+          # Fetch Jenkins CSRF crumb
+          # Required because "Prevent CSRF" is enabled
+          # -----------------------------------------------
           $crumbResponse = curl.exe `
             -s `
             -H "Authorization: Basic $auth" `
             "$($env:JENKINS_URL)/crumbIssuer/api/json"
 
+          # -----------------------------------------------
+          # If crumb request fails, stop execution
+          # -----------------------------------------------
           if (-not $crumbResponse) {
             Write-Error "Failed to fetch CSRF crumb"
             exit 1
           }
 
+          # -----------------------------------------------
+          # Parse crumb JSON response
+          # Example:
+          # {
+          #   "crumbRequestField": "Jenkins-Crumb",
+          #   "crumb": "abc123..."
+          # }
+          # -----------------------------------------------
           $crumbJson  = $crumbResponse | ConvertFrom-Json
           $crumbField = $crumbJson.crumbRequestField
           $crumbValue = $crumbJson.crumb
 
-          # -------------------------------
-          # Trigger Jenkins build
-          # -------------------------------
+          # -----------------------------------------------
+          # Construct Jenkins build URL
+          # /job/<JOB_NAME>/build triggers a new build
+          # -----------------------------------------------
           $buildUrl = "$($env:JENKINS_URL)/job/$($env:JENKINS_JOB)/build"
           Write-Host "Triggering build URL: $buildUrl"
 
+          # -----------------------------------------------
+          # Trigger Jenkins build using POST
+          # Includes:
+          # - Authorization header
+          # - CSRF crumb header
+          # -----------------------------------------------
           curl.exe `
             -X POST `
             -H "Authorization: Basic $auth" `
             -H "${crumbField}: ${crumbValue}" `
             "$buildUrl"
 
+          # -----------------------------------------------
+          # Success message (build is queued instantly)
+          # -----------------------------------------------
           Write-Host "✅ Jenkins build triggered successfully"
