@@ -1,8 +1,11 @@
 // =======================================================
-// JENKINS DECLARATIVE PIPELINE
+// Jenkins Declarative Pipeline Definition
 // =======================================================
-// This pipeline executes Playwright tests and
-// securely publishes Allure reports inside Jenkins
+// This file defines how Jenkins should:
+// - Fetch code
+// - Install dependencies
+// - Run Playwright tests
+// - Publish HTML + Allure reports
 // =======================================================
 
 pipeline {
@@ -11,24 +14,32 @@ pipeline {
   // AGENT CONFIGURATION
   // -----------------------------------------------------
   // agent any means:
-  // - Jenkins can run this pipeline on any available agent
-  // - Useful when no node-specific constraints exist
-  // - Common default for CI pipelines
+  // - Jenkins can run this pipeline on ANY available agent
+  // - Works for single-node Jenkins or distributed setups
   agent any
 
 
   // -----------------------------------------------------
   // TOOLS CONFIGURATION
   // -----------------------------------------------------
-  // Tools block defines external tools required by the job
-  // These tools must be configured globally in Jenkins
+  // tools block allows Jenkins to automatically:
+  // - Download required tools
+  // - Add them to PATH during pipeline execution
   tools {
 
-    // nodejs 'NodeJS'
-    // - Refers to a NodeJS installation configured under:
-    //   Manage Jenkins → Global Tool Configuration
-    // - Makes node, npm, and npx available during pipeline execution
-    // - Required for Playwright and npm commands
+    // ---------------------------------------------------
+    // NODEJS TOOL
+    // ---------------------------------------------------
+    // 'NodeJS' is the NAME configured in:
+    // Manage Jenkins → Global Tool Configuration → NodeJS
+    //
+    // What Jenkins does internally:
+    // - Downloads Node.js (if not already present)
+    // - Exposes node, npm, npx commands to this pipeline
+    //
+    // WHY THIS IS IMPORTANT:
+    // - Playwright is Node-based
+    // - Avoids "npm not recognized" errors
     nodejs 'NodeJS'
   }
 
@@ -36,71 +47,100 @@ pipeline {
   // -----------------------------------------------------
   // PIPELINE STAGES
   // -----------------------------------------------------
-  // Stages define the logical steps of the CI pipeline
+  // Each stage represents a logical step in CI execution
   stages {
 
-    // ---------------------------------------------------
+    // ===================================================
     // STAGE 1: CHECKOUT SOURCE CODE
-    // ---------------------------------------------------
+    // ===================================================
     stage('Checkout') {
+
       steps {
 
+        // -----------------------------------------------
         // checkout scm
-        // - Pulls source code from the configured SCM
-        // - Uses repository URL and branch set in Jenkins job
-        // - Ensures latest code is available for the build
+        // -----------------------------------------------
+        // scm = Source Control Management
+        //
+        // This command:
+        // - Pulls code from the repository configured
+        //   in the Jenkins job (GitHub/GitLab/Bitbucket)
+        // - Uses branch, credentials, and URL from job config
         checkout scm
       }
     }
 
 
-    // ---------------------------------------------------
+    // ===================================================
     // STAGE 2: INSTALL DEPENDENCIES
-    // ---------------------------------------------------
+    // ===================================================
     stage('Install Dependencies') {
+
       steps {
 
-        // npm ci
-        // - Performs a clean installation of dependencies
-        // - Uses package-lock.json for exact versions
-        // - Faster and more reliable than npm install
-        // - Recommended approach for CI/CD pipelines
-        sh 'npm ci'
+        // -----------------------------------------------
+        // bat command (Windows agent)
+        // -----------------------------------------------
+        // IMPORTANT:
+        // - Jenkins is running on Windows
+        // - 'sh' works ONLY on Linux/Unix
+        // - 'bat' is required for Windows
+        //
+        // npm ci:
+        // - Faster than npm install
+        // - Uses package-lock.json
+        // - Ensures clean & reproducible installs
+        //
+        // BEST PRACTICE FOR CI
+        bat 'npm ci'
       }
     }
 
 
-    // ---------------------------------------------------
+    // ===================================================
     // STAGE 3: RUN PLAYWRIGHT TESTS
-    // ---------------------------------------------------
+    // ===================================================
     stage('Run Playwright Tests') {
+
       steps {
 
-        // npx playwright test
-        // - Executes all Playwright tests defined in the project
-        // - Generates multiple outputs:
-        //   1. playwright-report/ → HTML report
-        //   2. allure-results/   → Raw Allure data
-        //   3. JUnit XML         → If configured in Playwright
-        sh 'npx playwright test'
+        // -----------------------------------------------
+        // Execute Playwright Test Runner
+        // -----------------------------------------------
+        // npx:
+        // - Runs local Playwright from node_modules
+        // - Ensures correct project version is used
+        //
+        // This command:
+        // - Executes all Playwright tests
+        // - Generates:
+        //   - playwright-report (HTML)
+        //   - allure-results (raw Allure data)
+        bat 'npx playwright test'
       }
 
+
       // -------------------------------------------------
-      // POST-ACTIONS FOR THIS STAGE
+      // POST ACTIONS FOR THIS STAGE
       // -------------------------------------------------
+      // These steps run AFTER test execution
       post {
+
+        // always:
+        // - Runs even if tests FAIL
+        // - Ensures reports are not lost
         always {
 
-          // archiveArtifacts
-          // - Saves generated files as Jenkins build artifacts
-          // - Artifacts can be downloaded from Jenkins UI
-          //
-          // artifacts: 'playwright-report/**'
-          // - Archives the Playwright HTML report
+          // ---------------------------------------------
+          // ARCHIVE PLAYWRIGHT HTML REPORT
+          // ---------------------------------------------
+          // What this does:
+          // - Stores HTML report as Jenkins build artifact
+          // - Allows download/view from Jenkins UI
           //
           // allowEmptyArchive: true
-          // - Prevents pipeline failure if the folder is missing
-          // - Useful when tests fail before report generation
+          // - Prevents pipeline failure if report is missing
+          //   (example: early crash)
           archiveArtifacts artifacts: 'playwright-report/**', allowEmptyArchive: true
         }
       }
@@ -109,27 +149,34 @@ pipeline {
 
 
   // -----------------------------------------------------
-  // PIPELINE-LEVEL POST ACTIONS
+  // GLOBAL POST ACTIONS (AFTER ALL STAGES)
   // -----------------------------------------------------
-  // These actions run after ALL stages complete
   post {
+
+    // always:
+    // - Runs regardless of pipeline success/failure
+    // - Ideal for publishing reports
     always {
 
-      // allure(...)
-      // - Provided by the Jenkins Allure Plugin
-      // - Reads raw results from allure-results/
-      // - Generates and publishes an Allure HTML report
-      // - Report is accessible via Jenkins UI (secured)
+      // -----------------------------------------------
+      // ALLURE REPORT PUBLISHING
+      // -----------------------------------------------
+      // Requires:
+      // - Allure Jenkins Plugin installed
+      // - Allure Commandline configured globally
+      //
+      // allure-results:
+      // - Generated by allure-playwright reporter
+      // - Contains raw JSON test data
       allure([
 
         // includeProperties: false
-        // - Excludes Jenkins build properties from report
-        // - Keeps Allure report clean and focused on tests
+        // - Skips Jenkins build environment metadata
         includeProperties: false,
 
-        // results
-        // - Specifies location of Allure raw result files
-        // - Must match Playwright Allure reporter output path
+        // results:
+        // - Path where Allure raw results are stored
+        // - Jenkins reads from here to build report UI
         results: [[path: 'allure-results']]
       ])
     }
