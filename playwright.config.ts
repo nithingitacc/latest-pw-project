@@ -23,8 +23,9 @@ export default defineConfig({
   - Enable both human-readable and CI-friendly reports
 
   WHY MULTIPLE REPORTERS:
-  - HTML → For manual review (QA, Managers, Stakeholders)
-  - JUnit XML → For Jenkins CI (Test Results tab)
+  - HTML   → Manual review (QA, Managers, Stakeholders)
+  - JUnit  → Jenkins CI (Test Results tab)
+  - Allure → Enterprise-grade reporting with history & trends
   */
   reporter: [
 
@@ -59,7 +60,28 @@ export default defineConfig({
     */
     ['junit', {
       outputFile: 'test-results/results.xml'
-    }]
+    }],
+
+    /*
+    -------------------------------------------------------
+    ALLURE REPORTER
+    -------------------------------------------------------
+    PURPOSE:
+    - Advanced, enterprise-grade reporting
+    - Historical trends across builds
+    - Categorization, severity, environment details
+
+    OUTPUT:
+    - Generates raw results in 'allure-results/' folder
+    - These results are later processed by:
+      - Jenkins Allure Plugin OR
+      - Allure CLI (allure generate)
+
+    WHY THIS IS ORG-SAFE:
+    - Reports are rendered inside Jenkins
+    - Access controlled via Jenkins authentication
+    */
+    ['allure-playwright']
   ],
 
   /*
