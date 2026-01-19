@@ -152,7 +152,7 @@ pipeline {
         // ---------------------------------------------
         // MUST MATCH:
         // Global Tool Configuration → Allure Commandline → Name
-        commandline: 'allure',
+        commandline: 'Allure',
 
         // ---------------------------------------------
         // Allure Results Directory
