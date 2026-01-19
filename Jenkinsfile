@@ -1,13 +1,6 @@
 // =======================================================
-// Jenkins Declarative Pipeline Definition
-// =======================================================
-// PURPOSE:
-// - Checkout code from GitHub
-// - Install Node dependencies
-// - Run Playwright tests
-// - Generate Playwright HTML report
-// - Generate Allure report
-// - Persist Allure history across builds (ORG SAFE)
+// Jenkins Declarative Pipeline
+// Playwright + Allure with History Persistence
 // =======================================================
 
 pipeline {
@@ -15,26 +8,24 @@ pipeline {
   // -----------------------------------------------------
   // AGENT CONFIGURATION
   // -----------------------------------------------------
-  // Run on any available Jenkins agent
+  // agent any:
+  // - Allows Jenkins to run this pipeline on any available agent
+  // - Works for single-node or multi-node Jenkins
   agent any
 
 
   // -----------------------------------------------------
   // TOOLS CONFIGURATION
   // -----------------------------------------------------
+  // tools block ensures required tools are:
+  // - Installed (if missing)
+  // - Added to PATH automatically during pipeline execution
   tools {
 
-    // ---------------------------------------------------
-    // NODEJS TOOL
-    // ---------------------------------------------------
-    // Must match:
-    // Manage Jenkins → Global Tool Configuration → NodeJS
-    //
-    // Ensures:
-    // - node
-    // - npm
-    // - npx
-    // are available during pipeline execution
+    // nodejs 'NodeJS'
+    // - 'NodeJS' must exactly match the name configured in:
+    //   Manage Jenkins → Global Tool Configuration → NodeJS
+    // - Provides node, npm, npx commands
     nodejs 'NodeJS'
   }
 
@@ -48,10 +39,13 @@ pipeline {
     // STAGE 1: CHECKOUT SOURCE CODE
     // ===================================================
     stage('Checkout') {
+
       steps {
 
-        // Pulls code from GitHub repository
-        // Uses credentials configured in Jenkins job
+        // checkout scm:
+        // - Pulls source code from the repository
+        // - Uses repository URL, branch, and credentials
+        //   defined in the Jenkins job configuration
         checkout scm
       }
     }
@@ -61,14 +55,17 @@ pipeline {
     // STAGE 2: INSTALL DEPENDENCIES
     // ===================================================
     stage('Install Dependencies') {
+
       steps {
 
-        // Windows agent → use bat
+        // bat:
+        // - Used because Jenkins is running on Windows
+        // - 'sh' would be used on Linux agents
         //
         // npm ci:
-        // - Faster
+        // - Faster and cleaner than npm install
         // - Uses package-lock.json
-        // - Clean install every build (CI best practice)
+        // - Ideal for CI/CD pipelines
         bat 'npm ci'
       }
     }
@@ -78,21 +75,30 @@ pipeline {
     // STAGE 3: RUN PLAYWRIGHT TESTS
     // ===================================================
     stage('Run Playwright Tests') {
+
       steps {
 
-        // Runs Playwright tests
-        //
-        // Generates:
-        // - playwright-report/  (HTML)
-        // - allure-results/     (raw Allure data)
+        // npx playwright test:
+        // - Runs Playwright using the local project version
+        // - Executes all tests
+        // - Generates:
+        //   1. playwright-report (HTML)
+        //   2. allure-results (raw Allure data)
         bat 'npx playwright test'
       }
 
+      // -------------------------------------------------
+      // POST ACTIONS FOR THIS STAGE
+      // -------------------------------------------------
       post {
         always {
 
-          // Archive Playwright HTML report
-          // Accessible from Jenkins build → Artifacts
+          // archiveArtifacts:
+          // - Stores Playwright HTML report as a Jenkins artifact
+          // - Makes it downloadable from the Jenkins UI
+          //
+          // allowEmptyArchive: true
+          // - Prevents pipeline failure if report is missing
           archiveArtifacts artifacts: 'playwright-report/**', allowEmptyArchive: true
         }
       }
@@ -100,71 +106,81 @@ pipeline {
 
 
     // ===================================================
-    // STAGE 4: RESTORE ALLURE HISTORY (ORG SAFE)
+    // STAGE 4: RESTORE ALLURE HISTORY
     // ===================================================
+    // Purpose:
+    // - Preserve Allure trends (history, duration, flaky tests)
+    // - Copy history from the previous successful Jenkins build
     stage('Restore Allure History') {
-      steps {
 
-        // ------------------------------------------------
-        // copyArtifacts
-        // ------------------------------------------------
-        // Copies history from LAST SUCCESSFUL BUILD
-        //
-        // Source:
-        //   previous_build/allure-report/history
-        //
-        // Target:
-        //   current_build/allure-results/history
-        //
-        // WHY BEFORE ALLURE GENERATION:
-        // - Allure merges history during report build
-        //
-        // optional: true
-        // - Prevents failure on first run
-        copyArtifacts(
-          projectName: env.JOB_NAME,
-          selector: lastSuccessful(),
-          filter: 'allure-report/history/**',
-          target: 'allure-results',
-          optional: true
-        )
+      steps {
+        script {
+
+          // Ensure allure-results directory exists
+          // - Allure expects history to be inside allure-results/history
+          bat 'if not exist allure-results mkdir allure-results'
+
+          // copyArtifacts:
+          // - Uses Copy Artifact Plugin
+          // - Copies artifacts from a previous build of the SAME job
+          //
+          // projectName: env.JOB_NAME
+          // - env.JOB_NAME ensures we copy from the same Jenkins job
+          //
+          // selector: StatusBuildSelector
+          // - stable: false → last SUCCESSFUL build (not only stable)
+          //
+          // filter:
+          // - Only copy Allure history folder
+          //
+          // optional: true
+          // - Pipeline will NOT fail if this is the first build
+          copyArtifacts(
+            projectName: env.JOB_NAME,
+            selector: [$class: 'StatusBuildSelector', stable: false],
+            filter: 'allure-report/history/**',
+            optional: true
+          )
+
+          // Move copied history into allure-results/history
+          // - Allure reads previous trends ONLY from this location
+          //
+          // xcopy flags:
+          // /E → copy all subdirectories
+          // /I → assume destination is a directory
+          // /Y → overwrite without prompt
+          bat '''
+            if exist allure-report\\history (
+              xcopy /E /I /Y allure-report\\history allure-results\\history
+            )
+          '''
+        }
       }
     }
   }
 
 
   // -----------------------------------------------------
-  // GLOBAL POST ACTIONS (AFTER ALL STAGES)
+  // GLOBAL POST ACTIONS
   // -----------------------------------------------------
   post {
+
+    // always:
+    // - Runs whether the build passes or fails
+    // - Ensures reports are always published
     always {
 
-      // =================================================
-      // ALLURE REPORT GENERATION
-      // =================================================
+      // Allure report generation & publishing
       // Requires:
-      // - Allure Jenkins Plugin installed
+      // - Allure Jenkins Plugin
       // - Allure Commandline configured globally
-      //
-      // IMPORTANT:
-      // commandline MUST MATCH Global Tool name exactly
       allure([
         includeProperties: false,
-        jdk: '',
-        commandline: 'Allure',
         results: [[path: 'allure-results']]
       ])
 
-      // =================================================
-      // ARCHIVE ALLURE REPORT (FOR NEXT BUILD HISTORY)
-      // =================================================
-      // This step is CRITICAL
-      //
-      // Without this:
-      // - Next build cannot restore history
-      //
-      // With this:
-      // - Trends, duration, flaky stats persist
+      // Archive generated Allure report
+      // - Allows download & long-term storage
       archiveArtifacts artifacts: 'allure-report/**', allowEmptyArchive: true
     }
   }
