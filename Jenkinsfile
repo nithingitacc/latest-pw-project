@@ -1,11 +1,13 @@
 // =======================================================
 // Jenkins Declarative Pipeline Definition
 // =======================================================
-// This file defines how Jenkins should:
-// - Fetch code
-// - Install dependencies
+// PURPOSE:
+// - Checkout code from GitHub
+// - Install Node dependencies
 // - Run Playwright tests
-// - Publish HTML + Allure reports
+// - Generate Playwright HTML report
+// - Generate Allure report
+// - Persist Allure history across builds (ORG SAFE)
 // =======================================================
 
 pipeline {
@@ -13,33 +15,26 @@ pipeline {
   // -----------------------------------------------------
   // AGENT CONFIGURATION
   // -----------------------------------------------------
-  // agent any means:
-  // - Jenkins can run this pipeline on ANY available agent
-  // - Works for single-node Jenkins or distributed setups
+  // Run on any available Jenkins agent
   agent any
 
 
   // -----------------------------------------------------
   // TOOLS CONFIGURATION
   // -----------------------------------------------------
-  // tools block allows Jenkins to automatically:
-  // - Download required tools
-  // - Add them to PATH during pipeline execution
   tools {
 
     // ---------------------------------------------------
     // NODEJS TOOL
     // ---------------------------------------------------
-    // 'NodeJS' is the NAME configured in:
+    // Must match:
     // Manage Jenkins → Global Tool Configuration → NodeJS
     //
-    // Jenkins will:
-    // - Auto-install Node.js if missing
-    // - Add node, npm, npx to PATH
-    //
-    // REQUIRED FOR:
-    // - Playwright
-    // - npm ci
+    // Ensures:
+    // - node
+    // - npm
+    // - npx
+    // are available during pipeline execution
     nodejs 'NodeJS'
   }
 
@@ -55,8 +50,8 @@ pipeline {
     stage('Checkout') {
       steps {
 
-        // Pulls source code from the repository
-        // configured in the Jenkins job
+        // Pulls code from GitHub repository
+        // Uses credentials configured in Jenkins job
         checkout scm
       }
     }
@@ -68,13 +63,12 @@ pipeline {
     stage('Install Dependencies') {
       steps {
 
-        // ------------------------------------------------
-        // Windows agent → use bat (NOT sh)
-        // ------------------------------------------------
+        // Windows agent → use bat
+        //
         // npm ci:
-        // - Clean install
+        // - Faster
         // - Uses package-lock.json
-        // - Faster and stable for CI
+        // - Clean install every build (CI best practice)
         bat 'npm ci'
       }
     }
@@ -86,31 +80,54 @@ pipeline {
     stage('Run Playwright Tests') {
       steps {
 
-        // ------------------------------------------------
-        // Execute Playwright tests
-        // ------------------------------------------------
-        // npx ensures local Playwright version is used
+        // Runs Playwright tests
         //
         // Generates:
-        // - playwright-report  (HTML report)
-        // - allure-results     (raw Allure data)
+        // - playwright-report/  (HTML)
+        // - allure-results/     (raw Allure data)
         bat 'npx playwright test'
       }
 
-      // -------------------------------------------------
-      // POST ACTIONS (RUN EVEN IF TESTS FAIL)
-      // -------------------------------------------------
       post {
         always {
 
-          // ---------------------------------------------
-          // ARCHIVE PLAYWRIGHT HTML REPORT
-          // ---------------------------------------------
-          // Makes the HTML report downloadable
-          // from Jenkins build page
-          archiveArtifacts artifacts: 'playwright-report/**',
-                           allowEmptyArchive: true
+          // Archive Playwright HTML report
+          // Accessible from Jenkins build → Artifacts
+          archiveArtifacts artifacts: 'playwright-report/**', allowEmptyArchive: true
         }
+      }
+    }
+
+
+    // ===================================================
+    // STAGE 4: RESTORE ALLURE HISTORY (ORG SAFE)
+    // ===================================================
+    stage('Restore Allure History') {
+      steps {
+
+        // ------------------------------------------------
+        // copyArtifacts
+        // ------------------------------------------------
+        // Copies history from LAST SUCCESSFUL BUILD
+        //
+        // Source:
+        //   previous_build/allure-report/history
+        //
+        // Target:
+        //   current_build/allure-results/history
+        //
+        // WHY BEFORE ALLURE GENERATION:
+        // - Allure merges history during report build
+        //
+        // optional: true
+        // - Prevents failure on first run
+        copyArtifacts(
+          projectName: env.JOB_NAME,
+          selector: lastSuccessful(),
+          filter: 'allure-report/history/**',
+          target: 'allure-results',
+          optional: true
+        )
       }
     }
   }
@@ -122,44 +139,33 @@ pipeline {
   post {
     always {
 
-      // -----------------------------------------------
-      // ALLURE REPORT PUBLISHING (FIXED & CORRECT)
-      // -----------------------------------------------
-      // REQUIREMENTS:
-      // 1. Allure Jenkins Plugin installed
-      // 2. Allure Commandline configured in:
-      //    Manage Jenkins → Global Tool Configuration
+      // =================================================
+      // ALLURE REPORT GENERATION
+      // =================================================
+      // Requires:
+      // - Allure Jenkins Plugin installed
+      // - Allure Commandline configured globally
       //
       // IMPORTANT:
-      // - 'commandline' value MUST match
-      //   the Global Tool name exactly
+      // commandline MUST MATCH Global Tool name exactly
       allure([
-
-        // ---------------------------------------------
-        // Disable Jenkins environment properties
-        // ---------------------------------------------
         includeProperties: false,
-
-        // ---------------------------------------------
-        // JDK selection
-        // ---------------------------------------------
-        // Empty string means:
-        // - Use Jenkins default JDK
         jdk: '',
-
-        // ---------------------------------------------
-        // Allure Commandline Tool
-        // ---------------------------------------------
-        // MUST MATCH:
-        // Global Tool Configuration → Allure Commandline → Name
         commandline: 'Allure',
-
-        // ---------------------------------------------
-        // Allure Results Directory
-        // ---------------------------------------------
-        // Generated by allure-playwright reporter
         results: [[path: 'allure-results']]
       ])
+
+      // =================================================
+      // ARCHIVE ALLURE REPORT (FOR NEXT BUILD HISTORY)
+      // =================================================
+      // This step is CRITICAL
+      //
+      // Without this:
+      // - Next build cannot restore history
+      //
+      // With this:
+      // - Trends, duration, flaky stats persist
+      archiveArtifacts artifacts: 'allure-report/**', allowEmptyArchive: true
     }
   }
 }
