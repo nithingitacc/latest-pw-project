@@ -134,6 +134,35 @@ pipeline {
     }
 
     // =============================
+    // BUILD UNSTABLE EMAIL (NEW)
+    // =============================
+    unstable {
+      emailext(
+        subject: "⚠️ Jenkins Build UNSTABLE - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+
+        body: """
+          <h2 style="color:orange;">Build Unstable</h2>
+
+          <p><b>Job:</b> ${env.JOB_NAME}</p>
+          <p><b>Build:</b> ${env.BUILD_NUMBER}</p>
+          <p><b>Status:</b> UNSTABLE</p>
+
+          <p>
+            Some tests were flaky, retried, or partially failed.
+          </p>
+
+          <p>
+            🔗 <a href="${env.BUILD_URL}">Jenkins Build</a><br/>
+            📊 <a href="${env.BUILD_URL}allure">Allure Report</a>
+          </p>
+        """,
+
+        to: "nithin.jenkins@gmail.com",
+        mimeType: 'text/html'
+      )
+    }
+
+    // =============================
     // BUILD FAILURE EMAIL
     // =============================
     failure {
@@ -155,7 +184,7 @@ pipeline {
           <p>Please review logs and failed test cases.</p>
         """,
 
-        to: "qa-team@company.com,dev-team@company.com",
+        to: "nithin.jenkins@gmail.com",
         mimeType: 'text/html'
       )
     }
