@@ -128,7 +128,7 @@ pipeline {
           <p>All tests passed successfully.</p>
         """,
 
-        to: "qa-team@company.com",
+        to: "nithin.jenkins@gmail.com",
         mimeType: 'text/html'
       )
     }
